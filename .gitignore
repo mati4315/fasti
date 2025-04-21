@@ -1,0 +1,33 @@
+# Archivos de entorno
+.env
+.env.*
+!.env.example
+
+# Credenciales
+src/google-credentials.json
+google-credentials.json
+
+# Dependencias
+node_modules/
+package-lock.json
+
+# Archivos de audio
+audio_files/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
+
+# Archivos de IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Archivos de compilación
+dist/
+build/ 

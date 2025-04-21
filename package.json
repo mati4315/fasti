@@ -1,0 +1,29 @@
+{
+  "name": "rss-news-processor",
+  "version": "1.0.0",
+  "description": "API para procesar noticias RSS con Fastify",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "dev": "nodemon src/server.js",
+    "start": "node src/server.js",
+    "init-db": "node database/init-db.js",
+    "process-news": "node src/scripts/processNews.js"
+  },
+  "dependencies": {
+    "@fastify/cors": "^8.4.1",
+    "@fastify/static": "^7.0.1",
+    "dotenv": "^16.3.1",
+    "fastify": "^4.24.3",
+    "node-cron": "^3.0.3",
+    "pg": "^8.11.3",
+    "rss-parser": "^3.13.0",
+    "axios": "^1.6.2",
+    "@google-cloud/text-to-speech": "^4.2.1",
+    "openai": "^4.20.1",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+} 
