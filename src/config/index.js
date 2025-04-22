@@ -1,13 +1,8 @@
-import dotenv from 'dotenv';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
-
-// Obtener la ruta del directorio actual
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const dotenv = require('dotenv');
+const path = require('path');
 
 // Cargar variables de entorno
-dotenv.config({ path: join(__dirname, '../../.env') });
+dotenv.config({ path: path.join(__dirname, '../../.env') });
 
 /**
  * Configuración del servidor
@@ -16,7 +11,12 @@ dotenv.config({ path: join(__dirname, '../../.env') });
 const config = {
   // Base de datos
   database: {
-    url: process.env.DATABASE_URL,
+    host: process.env.DB_HOST || 'localhost',
+    port: process.env.DB_PORT || '3306',
+    user: process.env.DB_USER || 'fasty',
+    password: process.env.DB_PASSWORD || '35115415',
+    database: process.env.DB_NAME || 'fasty',
+    dialect: 'mysql'
   },
 
   // APIs Externas
@@ -50,4 +50,4 @@ const config = {
   },
 };
 
-export default config; 
+module.exports = config; 

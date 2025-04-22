@@ -1,6 +1,18 @@
-import aiService from './aiService.js';
-import audioService from './audioService.js';
-import timestampService from './timestampService.js';
+const { OpenAI } = require('openai');
+const { TextToSpeechClient } = require('@google-cloud/text-to-speech');
+const { v4: uuidv4 } = require('uuid');
+const fs = require('fs').promises;
+const path = require('path');
+const config = require('../config');
+
+// Inicializar clientes de APIs
+const openai = new OpenAI({
+  apiKey: config.openai.apiKey
+});
+
+const textToSpeech = new TextToSpeechClient({
+  keyFilename: config.google.credentialsPath
+});
 
 /**
  * Procesa y guarda un ítem de noticia del RSS
@@ -67,6 +79,135 @@ async function processAndSaveNewsItem(rssItem, db) {
   }
 }
 
-export default {
+/**
+ * Procesa una noticia: genera resumen, traduce y crea audio
+ * @param {Object} newsData - Datos de la noticia a procesar
+ * @returns {Promise<Object>} Noticia procesada con resumen, traducción y audio
+ */
+async function processNewsItem(newsData) {
+  try {
+    console.log('Iniciando procesamiento de noticia...');
+
+    // Generar resumen en inglés
+    const summary = await generateSummary(newsData.description);
+    console.log('✓ Resumen generado');
+
+    // Traducir título y resumen al español
+    const [titleEs, summaryEs] = await Promise.all([
+      translateText(newsData.title),
+      translateText(summary)
+    ]);
+    console.log('✓ Traducción completada');
+
+    // Generar audio del resumen en español
+    const audioFileName = await generateAudio(summaryEs);
+    console.log('✓ Audio generado');
+
+    return {
+      ...newsData,
+      title_es: titleEs,
+      description_es: summaryEs,
+      audio: audioFileName
+    };
+  } catch (error) {
+    console.error('Error en processNewsItem:', error);
+    throw error;
+  }
+}
+
+/**
+ * Genera un resumen del texto usando OpenAI
+ * @param {string} text - Texto a resumir
+ * @returns {Promise<string>} Resumen generado
+ */
+async function generateSummary(text) {
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-3.5-turbo",
+      messages: [
+        {
+          role: "system",
+          content: "You are a helpful assistant that creates concise summaries of news articles. Keep the summary to 2-3 sentences."
+        },
+        {
+          role: "user",
+          content: `Please summarize this news article: ${text}`
+        }
+      ],
+      temperature: 0.7,
+      max_tokens: 150
+    });
+
+    return response.choices[0].message.content.trim();
+  } catch (error) {
+    console.error('Error al generar resumen:', error);
+    throw error;
+  }
+}
+
+/**
+ * Traduce texto al español usando OpenAI
+ * @param {string} text - Texto a traducir
+ * @returns {Promise<string>} Texto traducido
+ */
+async function translateText(text) {
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-3.5-turbo",
+      messages: [
+        {
+          role: "system",
+          content: "You are a professional translator. Translate the text to Spanish, maintaining the original meaning and tone."
+        },
+        {
+          role: "user",
+          content: `Translate this text to Spanish: ${text}`
+        }
+      ],
+      temperature: 0.3,
+      max_tokens: 150
+    });
+
+    return response.choices[0].message.content.trim();
+  } catch (error) {
+    console.error('Error al traducir texto:', error);
+    throw error;
+  }
+}
+
+/**
+ * Genera archivo de audio a partir de texto
+ * @param {string} text - Texto para convertir a audio
+ * @returns {Promise<string>} Nombre del archivo de audio generado
+ */
+async function generateAudio(text) {
+  try {
+    const request = {
+      input: { text },
+      voice: {
+        languageCode: 'es-ES',
+        name: 'es-ES-Standard-A'
+      },
+      audioConfig: {
+        audioEncoding: 'MP3',
+        pitch: 0,
+        speakingRate: 0.9
+      },
+    };
+
+    const [response] = await textToSpeech.synthesizeSpeech(request);
+    const audioFileName = `${uuidv4()}.mp3`;
+    const audioPath = path.join(config.audio.storagePath, audioFileName);
+
+    await fs.writeFile(audioPath, response.audioContent, 'binary');
+    return audioFileName;
+  } catch (error) {
+    console.error('Error al generar audio:', error);
+    throw error;
+  }
+}
+
+module.exports = {
   processAndSaveNewsItem,
+  processNewsItem
 }; 

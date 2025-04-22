@@ -1,67 +1,60 @@
-import Fastify from 'fastify';
-import cors from '@fastify/cors';
-import pkg from 'pg';
-const { Pool } = pkg;
-import config from './config/index.js';
-import newsRoutes from './routes/news.js';
-import newsProcessor from './jobs/newsProcessor.js';
+const fastify = require('fastify')({ logger: true });
+const cors = require('@fastify/cors');
+const staticFiles = require('@fastify/static');
+const path = require('path');
+const config = require('./config');
+const sequelize = require('../database');
+const News = require('./models/News');
 
-/**
- * Inicializa y configura el servidor Fastify
- * @returns {Promise<FastifyInstance>} Instancia del servidor Fastify
- */
-async function buildServer() {
-  // Crear instancia de Fastify
-  const fastify = Fastify({
-    logger: true,
-  });
+// Registrar plugins
+fastify.register(cors);
+fastify.register(staticFiles, {
+  root: path.join(__dirname, 'audio_files'),
+  prefix: '/audio/'
+});
 
-  // Registrar plugin de CORS
-  await fastify.register(cors, {
-    origin: true, // En producción, especificar los orígenes permitidos
-  });
-
-  // Configurar pool de conexiones a PostgreSQL
-  const pool = new Pool({
-    connectionString: config.database.url,
-  });
-
-  // Decorar fastify con el pool de conexiones
-  fastify.decorate('pg', pool);
-
-  // Registrar rutas
-  await fastify.register(newsRoutes);
-
-  // Ruta de health check
-  fastify.get('/health', async () => {
-    return { status: 'ok' };
-  });
-
-  // Iniciar el procesador de noticias
-  newsProcessor.startNewsProcessor(pool);
-
-  return fastify;
-}
-
-/**
- * Inicia el servidor
- */
-async function startServer() {
+// Rutas
+fastify.get('/api/news', async (request, reply) => {
   try {
-    const server = await buildServer();
-    
-    // Iniciar el servidor
-    await server.listen({
-      port: config.server.port,
-      host: config.server.host,
+    const news = await News.findAll({
+      order: [['pubDate', 'DESC']]
     });
-
-    console.log(`Servidor iniciado en http://${config.server.host}:${config.server.port}`);
-  } catch (err) {
-    console.error('Error al iniciar el servidor:', err);
-    process.exit(1);
+    return { news };
+  } catch (error) {
+    fastify.log.error(error);
+    reply.code(500).send({ error: 'Error al obtener las noticias' });
   }
-}
+});
+
+fastify.get('/api/news/:id', async (request, reply) => {
+  try {
+    const news = await News.findByPk(request.params.id);
+    if (!news) {
+      return reply.code(404).send({ error: 'Noticia no encontrada' });
+    }
+    return news;
+  } catch (error) {
+    fastify.log.error(error);
+    reply.code(500).send({ error: 'Error al obtener la noticia' });
+  }
+});
 
 // Iniciar el servidor
-startServer(); 
+const start = async () => {
+  try {
+    // Sincronizar la base de datos
+    await sequelize.sync();
+    
+    // Iniciar el servidor
+    await fastify.listen({ 
+      port: config.server.port, 
+      host: config.server.host 
+    });
+    console.log(`Servidor iniciado en http://${config.server.host}:${config.server.port}`);
+  } catch (err) {
+    fastify.log.error(err);
+    process.exit(1);
+  }
+};
+
+start(); 

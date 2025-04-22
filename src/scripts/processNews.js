@@ -1,71 +1,72 @@
-import pkg from 'pg';
-const { Pool } = pkg;
-import config from '../config/index.js';
-import rssService from '../services/rssService.js';
-import processNewsService from '../services/processNewsService.js';
+const { fetchLatestNews } = require('../services/rssService');
+const { processNewsItem } = require('../services/processNewsService');
+const sequelize = require('../../database');
+const News = require('../models/News');
 
 /**
  * Script para procesar una noticia específica del feed
  * @param {number} newsIndex - Índice de la noticia a procesar (0 = más reciente)
  */
 async function processNews(newsIndex = 0) {
-  let pool;
   try {
-    console.log(`Iniciando procesamiento de la noticia en el índice ${newsIndex}...`);
+    // Obtener las últimas noticias del feed RSS
+    const newsItems = await fetchLatestNews();
+    console.log(`Se encontraron ${newsItems.length} noticias en el feed RSS`);
 
-    // Crear pool de conexión a la base de datos
-    pool = new Pool({
-      connectionString: config.database.url,
+    if (newsItems.length === 0) {
+      console.log('No hay noticias nuevas para procesar');
+      process.exit(0);
+    }
+
+    if (newsIndex >= newsItems.length) {
+      console.log(`Error: El índice ${newsIndex} está fuera de rango. Solo hay ${newsItems.length} noticias disponibles.`);
+      process.exit(1);
+    }
+
+    const selectedNews = newsItems[newsIndex];
+    console.log(`Procesando noticia [${newsIndex}]: ${selectedNews.title}`);
+
+    // Verificar si la noticia ya existe
+    const existingNews = await News.findOne({
+      where: { link: selectedNews.link }
     });
 
-    // Obtener las últimas noticias del feed
-    const news = await rssService.fetchLatestNews();
+    if (existingNews) {
+      console.log('Esta noticia ya existe en la base de datos');
+      process.exit(0);
+    }
+
+    // Procesar la noticia (resumen, traducción y audio)
+    console.log('\nIniciando procesamiento completo de la noticia...');
+    const processedNews = await processNewsItem(selectedNews);
     
-    if (news.length === 0) {
-      console.log('No se encontraron noticias en el feed');
-      return;
-    }
+    // Crear la noticia en la base de datos
+    const newsData = {
+      title: processedNews.title,
+      title_es: processedNews.title_es,
+      link: processedNews.link,
+      description: processedNews.description,
+      pubDate: processedNews.pubDate,
+      imagen: processedNews.imageUrl,
+      audio: processedNews.audio,
+      noticia: await getNextNoticiaId()
+    };
 
-    // Verificar que el índice sea válido
-    if (newsIndex < 0 || newsIndex >= news.length) {
-      console.log(`Error: El índice ${newsIndex} está fuera de rango. Hay ${news.length} noticias disponibles.`);
-      return;
-    }
-
-    // Obtener la noticia en el índice especificado
-    const selectedNews = news[newsIndex];
-    console.log(`\nNoticia seleccionada:`);
-    console.log(`Título: ${selectedNews.title}`);
-    console.log(`Fecha: ${selectedNews.pubDate}`);
-
-    // Verificar si ya existe
-    const exists = await pool.query('SELECT id FROM News WHERE link = $1', [selectedNews.link]);
-    
-    if (exists.rows.length > 0) {
-      console.log('\nEsta noticia ya existe en la base de datos');
-      return;
-    }
-
-    // Preguntar si desea continuar
-    console.log('\n¿Deseas procesar esta noticia? (Ctrl+C para cancelar)');
-    await new Promise(resolve => setTimeout(resolve, 5000));
-
-    // Procesar la noticia
-    console.log('\nProcesando noticia...');
-    await processNewsService.processAndSaveNewsItem(selectedNews, pool);
-    console.log('✓ Noticia procesada exitosamente');
+    const savedNews = await News.create(newsData);
+    console.log(`\n✓ Noticia guardada exitosamente con ID: ${savedNews.id}`);
+    process.exit(0);
 
   } catch (error) {
-    console.error('Error en el procesamiento:', error);
-  } finally {
-    if (pool) {
-      await pool.end();
-    }
+    console.error('Error al procesar la noticia:', error);
+    process.exit(1);
   }
 }
 
-// Obtener el índice de la noticia desde los argumentos de línea de comandos
-const newsIndex = process.argv[2] ? parseInt(process.argv[2], 10) : 0;
+async function getNextNoticiaId() {
+  const maxNoticia = await News.max('noticia');
+  return (maxNoticia || 0) + 1;
+}
 
-// Ejecutar el script con el índice especificado
+// Obtener el índice de la noticia de los argumentos de la línea de comandos
+const newsIndex = parseInt(process.argv[2] || '0', 10);
 processNews(newsIndex); 

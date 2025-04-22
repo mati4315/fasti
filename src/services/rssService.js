@@ -1,5 +1,5 @@
-import Parser from 'rss-parser';
-import config from '../config/index.js';
+const Parser = require('rss-parser');
+const config = require('../config');
 
 /**
  * Cliente RSS Parser
@@ -8,11 +8,11 @@ import config from '../config/index.js';
 const parser = new Parser({
   customFields: {
     item: [
-      'media:content',
-      'media:thumbnail',
+      ['media:content', 'mediaContent'],
+      ['media:thumbnail', 'mediaThumbnail'],
       'enclosure',
       'image',
-      'content:encoded'
+      ['content:encoded', 'contentEncoded']
     ]
   }
 });
@@ -24,66 +24,44 @@ const parser = new Parser({
 async function fetchLatestNews() {
   try {
     console.log('Obteniendo noticias del feed RSS...');
-
     const feed = await parser.parseURL(config.rss.feedUrl);
-    console.log(`Se encontraron ${feed.items.length} noticias en el feed`);
-
-    // Mapear y limpiar los datos del feed
+    
+    console.log(`Se encontraron ${feed.items.length} noticias en total`);
+    
     const news = feed.items
       .slice(0, config.rss.numItems)
       .map(item => {
-        // Imprimir la estructura del ítem para debugging
-        console.log('Estructura del ítem:', JSON.stringify(item, null, 2));
-
-        // Extraer la URL de la imagen
-        let imageUrl = null;
-        
-        // Intentar obtener la imagen de diferentes fuentes
-        if (item.enclosure?.url) {
-          imageUrl = item.enclosure.url;
-        } else if (item['media:content']?.url) {
-          imageUrl = item['media:content'].url;
-        } else if (item['media:thumbnail']?.url) {
-          imageUrl = item['media:thumbnail'].url;
-        } else if (item.image?.url) {
-          imageUrl = item.image.url;
-        } else if (item['content:encoded']) {
-          // Buscar imagen en el contenido HTML
-          const imgMatch = item['content:encoded'].match(/<img[^>]+src="([^">]+)"/);
-          if (imgMatch) {
-            imageUrl = imgMatch[1];
-          }
-        }
+        // Intentar obtener la URL de la imagen de diferentes fuentes
+        const imageUrl = item.enclosure?.url ||
+          item.mediaContent?.url ||
+          item.mediaThumbnail?.url ||
+          item.image?.url ||
+          extractImageFromContent(item.contentEncoded);
 
         return {
           title: item.title?.trim() || '',
           link: item.link?.trim() || '',
           description: item.contentSnippet?.trim() || item.description?.trim() || '',
           pubDate: item.pubDate || item.isoDate || new Date().toISOString(),
-          enclosure: item.enclosure,
-          image: item.image,
-          mediaContent: item['media:content'],
-          mediaThumbnail: item['media:thumbnail'],
-          contentEncoded: item['content:encoded'],
-          imageUrl // Agregar la URL de la imagen extraída
+          imageUrl: imageUrl
         };
       });
 
-    // Filtrar noticias inválidas
-    const validNews = news.filter(item => 
-      item.title && 
-      item.link && 
-      item.description
-    );
-
-    console.log(`Se procesaron ${validNews.length} noticias válidas`);
-    return validNews;
+    return news;
   } catch (error) {
-    console.error('Error en fetchLatestNews:', error);
-    throw new Error('Error al obtener noticias del feed RSS');
+    console.error('Error al obtener noticias del feed RSS:', error);
+    throw error;
   }
 }
 
-export default {
-  fetchLatestNews,
+function extractImageFromContent(content) {
+  if (!content) return null;
+  
+  // Buscar una etiqueta img en el contenido HTML
+  const imgMatch = content.match(/<img[^>]+src="([^">]+)"/);
+  return imgMatch ? imgMatch[1] : null;
+}
+
+module.exports = {
+  fetchLatestNews
 }; 

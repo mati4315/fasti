@@ -1,27 +1,25 @@
 -- Crear la base de datos si no existe
-SELECT 'CREATE DATABASE fasty'
-WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'fasty')\gexec
+CREATE DATABASE IF NOT EXISTS fasty;
 
--- Conectar a la base de datos
-\c fasty
+USE fasty;
 
 -- Crear extensión para UUID
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- Crear tabla News
 CREATE TABLE IF NOT EXISTS News (
-  id SERIAL PRIMARY KEY,
-  title TEXT NOT NULL,
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  noticia INT UNIQUE,
+  title VARCHAR(255) NOT NULL,
   title_es TEXT,
-  link TEXT UNIQUE NOT NULL,
+  link VARCHAR(255) NOT NULL,
   description TEXT,
-  pubDate TIMESTAMP WITH TIME ZONE NOT NULL,
+  pubDate DATETIME,
   imagen TEXT,
-  audioUrl TEXT,
-  timestamps JSONB,
-  createdAt TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-  updatedAt TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
+  audio TEXT,
+  createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Crear función para actualizar updatedAt
 CREATE OR REPLACE FUNCTION update_updated_at_column()
